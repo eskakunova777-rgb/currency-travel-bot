@@ -61,3 +61,11 @@ pip install -r requirements.txt
 25.00 EUR = 2 403.85 RUB. Учесть как расход? [Да] [Нет]
 Расход учтён! Остаток: 2 055.00 EUR, 197 596.15 RUB
 ```
+
+## Скриншоты
+
+| | |
+|---|---|
+| ![Старт и создание путешествия](skrinshoty/01_start_newtrip.jpg) | ![Курс из API и путешествие создано](skrinshoty/02_kurs_puteshestvie.jpg) |
+| ![Баланс и история](skrinshoty/03_balans_istoriya.jpg) | ![Смена курса и конвертация расхода](skrinshoty/04_kurs_rashod.jpg) |
+| ![Расход учтён, история расходов](skrinshoty/05_rashod_istoriya.jpg) | |
