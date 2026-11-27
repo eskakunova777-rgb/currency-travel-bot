@@ -5,6 +5,7 @@
 """
 
 import os
+import time
 
 import requests
 from dotenv import load_dotenv
@@ -38,8 +39,31 @@ def _access_key() -> str:
     return key
 
 
+RATE_LIMIT_RETRIES = 3
+RATE_LIMIT_PAUSE = 1.5  # секунды; бесплатный тариф не любит запросы подряд
+
+
+def _is_rate_limited(data: dict) -> bool:
+    error = data.get("error") or {}
+    return data.get("success") is False and (
+        error.get("code") == 106 or "rate_limit" in str(error.get("type", ""))
+        or "rate limitation" in str(error.get("info", ""))
+    )
+
+
 def _request(endpoint: str, params: dict) -> dict:
-    """GET-запрос к API. Ключ в тексте ошибок не показывается."""
+    """GET-запрос к API с повтором при ограничении частоты запросов."""
+    for attempt in range(RATE_LIMIT_RETRIES):
+        data, status = _request_once(endpoint, params)
+        if not _is_rate_limited(data):
+            break
+        if attempt < RATE_LIMIT_RETRIES - 1:
+            time.sleep(RATE_LIMIT_PAUSE * (attempt + 1))
+    return _check(data, status)
+
+
+def _request_once(endpoint: str, params: dict) -> tuple[dict, int]:
+    """Один GET-запрос. Ключ в тексте ошибок не показывается."""
     query = {"access_key": _access_key(), **params}
     url = f"{_base_url()}/{endpoint}"
     try:
@@ -59,7 +83,11 @@ def _request(endpoint: str, params: dict) -> dict:
 
     if not isinstance(data, dict):
         raise CurrencyAPIError("Сервис курсов валют вернул непонятный ответ.")
+    return data, response.status_code
 
+
+def _check(data: dict, status: int) -> dict:
+    """Переводит ошибки API в понятные сообщения."""
     if data.get("success") is False:
         error = data.get("error") or {}
         code = error.get("code")
@@ -67,6 +95,8 @@ def _request(endpoint: str, params: dict) -> dict:
             raise CurrencyAPIError("Ключ API не подошёл. Проверьте CURRENCY_ACCESS_KEY в .env.")
         if code == 104:
             raise CurrencyAPIError("Закончился месячный лимит запросов к API.")
+        if _is_rate_limited(data):
+            raise CurrencyAPIError("Сервис просит подождать: слишком частые запросы. Попробуйте через минуту.")
         if code in (105, "function_access_restricted"):
             raise CurrencyAPIError("Эта функция API недоступна на бесплатном тарифе.")
         if code in (201, 202, 401, 402):
@@ -74,8 +104,8 @@ def _request(endpoint: str, params: dict) -> dict:
         info = error.get("info") or error.get("type") or "неизвестная ошибка"
         raise CurrencyAPIError(f"Ошибка API: {info}")
 
-    if response.status_code >= 400:
-        raise CurrencyAPIError(f"Сервис курсов валют ответил ошибкой HTTP {response.status_code}.")
+    if status >= 400:
+        raise CurrencyAPIError(f"Сервис курсов валют ответил ошибкой HTTP {status}.")
     return data
 
 

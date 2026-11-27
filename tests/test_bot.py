@@ -244,3 +244,19 @@ def test_missing_key(monkeypatch):
     monkeypatch.setenv("CURRENCY_ACCESS_KEY", "")
     with pytest.raises(CurrencyAPIError, match="CURRENCY_ACCESS_KEY"):
         current_api.get_current_rate()
+
+
+def test_rate_limit_is_retried(api_key, monkeypatch):
+    monkeypatch.setattr(current_api, "RATE_LIMIT_PAUSE", 0)
+    limited = {"success": False, "error": {"code": 106, "type": "rate_limit_reached"}}
+    ok = {"success": True, "info": {"quote": 0.9}, "result": 90.0}
+    with patch("current_api.requests.get", side_effect=[_response(limited), _response(ok)]):
+        assert current_api.convert_currency(100, "USD", "EUR")["result"] == 90.0
+
+
+def test_rate_limit_gives_friendly_error(api_key, monkeypatch):
+    monkeypatch.setattr(current_api, "RATE_LIMIT_PAUSE", 0)
+    limited = {"success": False, "error": {"code": 106, "type": "rate_limit_reached"}}
+    with patch("current_api.requests.get", return_value=_response(limited)):
+        with pytest.raises(CurrencyAPIError, match="слишком частые запросы"):
+            current_api.convert_currency(100, "USD", "EUR")
